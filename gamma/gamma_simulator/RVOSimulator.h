@@ -231,6 +231,8 @@ namespace RVO {
 
 		std::string getAgentTag(int agentNo);
 
+		void setAgentTag(int agentNo, const std::string &tag);
+
 		Vector2 getAgentHeading(int agentNo);
 	
 		void setAgentBoundingBoxCorners(int agentNo, std::vector<Vector2> corners);

@@ -37,6 +37,7 @@
 #include "KdTree.h"
 #include "Obstacle.h"
 #include <limits>
+#include <iostream>
 
 namespace RVO {
 	Agent::Agent(RVOSimulator *sim) : maxNeighbors_(0), maxSpeed_(0.0f), neighborDist_(0.0f), radius_(0.0f), sim_(sim), timeHorizon_(0.0f), timeHorizonObst_(0.0f), id_(0) { }
@@ -849,6 +850,10 @@ namespace RVO {
 
 
 		float agt_res = 0.5f + 2.5f*res_dec_rate_ - res_dec_rate_ * dist;
+		//When dist > 2.5, the one with higher res dec rate will have smaller responsibility
+		//When dist < 2.5, the one with higher res dec rate will have larger responsibility
+		//When dist < 2.5, the one with lower res dec rate will have smaller responsibility
+		// agt_res = 0.5f + (2.5f - dist) * res_dec_rate_;
 		float other_agt_res = 0.5f + 2.5f*other->res_dec_rate_ - other->res_dec_rate_ * dist;
 
 		if (agt_res < 0.1f) {
@@ -862,6 +867,9 @@ namespace RVO {
 		if(agt_res == 0) return 0.0f;
 		else 
 			agt_res /= (agt_res + other_agt_res);
+
+		// if(other->tag_ == "Car" && dist < 4.0)
+			// std::cout << dist << ", " << agt_res << "\n";
 
 		return agt_res;
 	}

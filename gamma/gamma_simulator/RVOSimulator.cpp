@@ -264,6 +264,10 @@ namespace RVO {
 		return agents_[static_cast<size_t>(agentNo)]->tag_;
 	}
 
+	void RVOSimulator::setAgentTag(int agentNo, const std::string &tag){
+		agents_[static_cast<size_t>(agentNo)]->tag_ = tag;
+	}
+
 	Vector2 RVOSimulator::getAgentHeading(int agentNo)
 	{
 		return agents_[static_cast<size_t>(agentNo)]->heading_;
