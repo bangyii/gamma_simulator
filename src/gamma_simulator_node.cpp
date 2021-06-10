@@ -438,7 +438,6 @@ int main(int argc, char **argv)
 
     agent_states_pub_ = nh.advertise<gamma_simulator::AgentStates>("/gamma_simulator/agent_states", 1);
     obstacles_viz_pub_ = nh.advertise<visualization_msgs::MarkerArray>("/gamma_simulator/obstacles_viz", 1, true);
-    reset_gamma_serv_ = nh.advertiseService("/gamma_simulator/reset_agents", &resetGAMMA);
 
     if(!simulate_robot)
         robot_odom_timer_ = nh.createTimer(ros::Duration(1.0 / rate), &robotOdomTimer);
@@ -453,6 +452,9 @@ int main(int argc, char **argv)
     readAgents(agents_file);
     setupGAMMA();
     publishObstaclesViz();
+
+    //Advertise service only after gamma is setup to indicate simulator is ready
+    reset_gamma_serv_ = nh.advertiseService("/gamma_simulator/reset_agents", &resetGAMMA);
 
     ros::Rate r(rate);
     ROS_INFO("Start GAMMA");
