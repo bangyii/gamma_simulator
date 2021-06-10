@@ -1,4 +1,6 @@
 #include <gamma_simulator/gamma_simulator_node.h>
+#include <std_srvs/Trigger.h>
+#include <ros/package.h>
 #include <fstream>
 #include <iostream>
 #include <ctime>
@@ -9,13 +11,25 @@ enum AGENT_TYPES
     PEDESTRIAN
 };
 
+void setSeed(int seed)
+{
+    if(seed != 0)
+    {
+        ROS_INFO_STREAM("Using fixed seed of " << seed);
+        std::srand(seed);
+    }
+
+    else
+        std::srand(std::time(nullptr));
+}
+
 //Set-up simulation parameters
 bool setupGAMMA()
 {
     ROS_INFO("Setting up GAMMA");
 
     //Set random seed for slight pertubation in pref vel
-    std::srand(std::time(nullptr));
+    setSeed(seed);
 
     //Setup GAMMA sim basic parameters
     gamma_sim_ = new RVO::RVOSimulator();
@@ -57,6 +71,34 @@ bool setupGAMMA()
 
     ROS_INFO_STREAM("Number of agents in GAMMA: " << gamma_sim_->getNumAgents());
     ROS_INFO("Setup GAMMA complete");
+    return true;
+}
+
+bool resetGAMMA(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &resp)
+{
+    gamma_sim_->clearAllAgents();
+    robot_info_.id_ = -1;
+    agents_ = agents_initial_;
+    setSeed(seed);
+
+    //Add back all agents
+    for (auto &agent : agents_)
+    {
+        //Reassign agentID from gamma
+        agent.id_ = gamma_sim_->addAgent(RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y));
+        if (agent.id_ == RVO::RVO_ERROR)
+            ROS_INFO("Failed to add agent after reset");
+
+        else
+        {
+            gamma_sim_->setAgentResDecRate(agent.id_, 10.0);
+            gamma_sim_->setAgentAttentionRadius(agent.id_, 3.0, 1.0);
+            agent.heading_filter_const_ = heading_filter_const;
+            agent.waypoint_filter_const_ = waypoint_filter_const;
+        }
+    }
+    ROS_INFO("Reset complete");
+    resp.success = true;
     return true;
 }
 
@@ -212,6 +254,8 @@ bool readAgents(const std::string &file)
             agents_.push_back(temp_agent);
         }
     }
+
+    agents_initial_ = agents_;
 }
 
 bool readWaypoints(const std::string &file)
@@ -243,8 +287,6 @@ bool runStep()
         gamma_sim_->setAgentPrefVelocity(agent.id_, pref_vel);
     }
 
-    //Set velocity convex of robot based on current velocity
-
     gamma_sim_->doStep();
 
     //Update positions in local store
@@ -254,21 +296,6 @@ bool runStep()
         agent.odom_.pose.pose.position.x = pos.x();
         agent.odom_.pose.pose.position.y = pos.y();
     }
-
-        RVO::Vector2 pos = gamma_sim_->getAgentVelocity(robot_info_.id_);
-        ROS_INFO_STREAM(pos.x() << ", " << pos.y());
-
-    return true;
-}
-
-bool publishRobotVelocity()
-{
-    auto robot_vel = gamma_sim_->getAgentVelocity(robot_agent_id_);
-    auto robot_heading = gamma_sim_->getAgentHeading(robot_agent_id_);
-
-    geometry_msgs::Twist joy_vel;
-    joy_vel.linear.x = robot_vel.x();
-    joy_vel.angular.z = robot_vel.y();
 
     return true;
 }
@@ -335,6 +362,10 @@ bool readParams(ros::NodeHandle &nh)
         ROS_WARN_STREAM("Parameter waypoint_filter_time_const not set. Using default setting: " << waypoint_filter_time_const);
     if (!nh.getParam("simulate_robot", simulate_robot))
         ROS_WARN_STREAM("Parameter simulate_robot not set. Using default setting: " << simulate_robot);
+    if (!nh.getParam("seed", seed))
+        ROS_WARN_STREAM("Parameter seed not set. Using default setting: " << seed);
+    if (!nh.getParam("scenario_name", scenario_name))
+        ROS_WARN_STREAM("Parameter scenario_name not set. Using default setting: " << scenario_name);
 }
 
 void robotOdomTimer(const ros::TimerEvent &e)
@@ -399,9 +430,15 @@ int main(int argc, char **argv)
     //Read ros params
     readParams(nh);
 
-    robot_vel_pub_ = nh.advertise<geometry_msgs::Twist>("/joy_vel", 1);
+    //Find scenario files from gamma_simulator folder after read params
+    std::string package_path = ros::package::getPath("gamma_simulator");
+    waypoints_file = package_path + "/scenario/" + scenario_name + "/waypoints.txt";
+    agents_file = package_path + "/scenario/" + scenario_name + "/agents.txt";
+    obstacles_file = package_path + "/scenario/" + scenario_name + "/obstacles.txt";
+
     agent_states_pub_ = nh.advertise<gamma_simulator::AgentStates>("/gamma_simulator/agent_states", 1);
     obstacles_viz_pub_ = nh.advertise<visualization_msgs::MarkerArray>("/gamma_simulator/obstacles_viz", 1, true);
+    reset_gamma_serv_ = nh.advertiseService("/gamma_simulator/reset_agents", &resetGAMMA);
 
     if(!simulate_robot)
         robot_odom_timer_ = nh.createTimer(ros::Duration(1.0 / rate), &robotOdomTimer);
@@ -411,9 +448,9 @@ int main(int argc, char **argv)
     heading_filter_const = 1 - exp(-timeStep / heading_filter_time_const); //Fix heading time constant, depending on ros rate
     waypoint_filter_const = 1 - exp(-timeStep / waypoint_filter_time_const);
 
-    readWaypoints("/home/by/Desktop/waypoints.txt");
-    readObstacles("/home/by/Desktop/obstacles.txt");
-    readAgents("/home/by/Desktop/agents.txt");
+    readWaypoints(waypoints_file);
+    readObstacles(obstacles_file);
+    readAgents(agents_file);
     setupGAMMA();
     publishObstaclesViz();
 

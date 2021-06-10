@@ -133,6 +133,7 @@ ros::Publisher robot_vel_pub_;
 ros::Publisher agent_states_pub_;
 ros::Publisher obstacles_viz_pub_;
 ros::Timer robot_odom_timer_;
+ros::ServiceServer reset_gamma_serv_;
 tf2_ros::Buffer tf_buf;
 
 RVO::RVOSimulator *gamma_sim_ = nullptr;
@@ -153,6 +154,8 @@ bool use_dynamic_att = true;
 bool simulate_robot = false;
 double heading_filter_time_const = 0.2;
 double waypoint_filter_time_const = 0.5;
+int seed = 1;
+std::string scenario_name = "hospital";
 std::string waypoints_file;
 std::string obstacles_file;
 std::string agents_file;
@@ -164,6 +167,7 @@ AgentInfo robot_info_;
 
 std::vector<std::vector<RVO::Vector2>> obstacles_;
 std::vector<AgentInfo> agents_;
+std::vector<AgentInfo> agents_initial_;
 std::unordered_map<std::string, RVO::Vector2> waypoints_;
 int robot_agent_id_;
 gamma_simulator::AgentStates agent_states_;
