@@ -1,9 +1,5 @@
-1,-3,-24,1,1,goal6,goal7,goal13,goal12,goal11,goal10
-1,-3,-24,1,1,goal10,goal6,goal7,goal13,goal12,goal11,goal10
-1,2,-24,1,1,goal6,goal7,goal13,goal12,goal11,goal10
-2,-2,-15,1,1,goal9,goal10,goal6,goal7,goal13,goal12,goal11,goal10,goal6,goal5
-2,5.5,-15,1,1,goal9,goal10,goal6,goal7,goal13,goal12,goal11,goal10,goal6,goal5
-1,5.5,-10,1,1,goal5,goal9,goal10,goal6,goal7,goal13,goal12,goal11,goal10,goal6,goal5
-3,-5,-10,1,1,goal9,goal5,goal4,goal16,goal8,goal9,goal21,goal10,goal19,goal22,goal23,goal11,goal10,goal8,goal9
-3,-2,-8,3,1,goal8,goal9,goal21,goal10,goal19,goal22,goal23,goal11,goal10,goal8,goal9
-3,-5,-15,2,2,goal5,goal4,goal16,goal8,goal9,goal21,goal10,goal19,goal22,goal23,goal11,goal10,goal8,goal9
+5,0,-24.5,8,1,goal6,goal7,goal13,goal12,goal11,goal10
+5,0,-24.6,7,1,goal10,goal11,goal23,goal22,goal19
+5,0,-33.5,8,1,goal12,goal11,goal23,goal22,goal19,goal10,goal6,goal7,goal13
+4,0,-27.5,8,1,goal13,goal12,goal11,goal10,goal6,goal7
+5,0,-27.5,8,1,goal7,goal6,goal10,goal11,goal12,goal13

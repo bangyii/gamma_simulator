@@ -36,7 +36,7 @@ public:
     double waypoint_filter_const_ = 0.90;
     RVO::Vector2 cur_waypoint_offset_ = RVO::Vector2(0, 0);
     RVO::Vector2 pref_vel_;
-    double waypoint_offset_ = 1.0;
+    double waypoint_offset_ = 0.0;
 
     void updateWaypoint(double dist_)
     {
