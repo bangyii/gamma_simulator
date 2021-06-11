@@ -62,7 +62,7 @@ bool setupGAMMA()
 
         else
         {
-            gamma_sim_->setAgentResDecRate(agent.id_, 10.0);
+            gamma_sim_->setAgentResDecRate(agent.id_, 7.0);
             gamma_sim_->setAgentAttentionRadius(agent.id_, 3.0, 1.0);
             agent.heading_filter_const_ = heading_filter_const;
             agent.waypoint_filter_const_ = waypoint_filter_const;
@@ -91,7 +91,7 @@ bool resetGAMMA(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &re
 
         else
         {
-            gamma_sim_->setAgentResDecRate(agent.id_, 10.0);
+            gamma_sim_->setAgentResDecRate(agent.id_, 7.0);
             gamma_sim_->setAgentAttentionRadius(agent.id_, 3.0, 1.0);
             agent.heading_filter_const_ = heading_filter_const;
             agent.waypoint_filter_const_ = waypoint_filter_const;
@@ -401,7 +401,7 @@ void robotOdomTimer(const ros::TimerEvent &e)
 
             else
             {
-                gamma_sim_->setAgentResDecRate(robot_info_.id_, 0.00);
+                gamma_sim_->setAgentResDecRate(robot_info_.id_, 0.10);
                 gamma_sim_->setAgentAttentionRadius(robot_info_.id_, 2.0, 0.4);
                 gamma_sim_->setAgentTag(robot_info_.id_, "Car");
             }
