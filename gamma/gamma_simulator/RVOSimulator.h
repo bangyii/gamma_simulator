@@ -237,6 +237,8 @@ namespace RVO {
 	
 		void setAgentBoundingBoxCorners(int agentNo, std::vector<Vector2> corners);
 
+		std::vector<Vector2> getAgentBoundingBoxCorners(int agentNo);
+
 		void setAgentHeading(int agentNo, Vector2 heading);
 
 		void setAgentMaxTrackingAngle(int agentNo, float max_tracking_angle);

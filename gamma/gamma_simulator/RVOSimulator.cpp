@@ -277,6 +277,11 @@ namespace RVO {
 		agents_[static_cast<size_t>(agentNo)]->bounding_corners_ = corners;
 	}
 
+	std::vector<Vector2> RVOSimulator::getAgentBoundingBoxCorners(int agentNo)
+	{
+		return agents_[static_cast<size_t>(agentNo)]->bounding_corners_;
+	}
+
 	void RVOSimulator::setAgentHeading(int agentNo, Vector2 heading){
 		agents_[static_cast<size_t>(agentNo)]->heading_ = heading;
 	}
