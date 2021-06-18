@@ -13,7 +13,7 @@ enum AGENT_TYPES
 
 void setSeed(int seed)
 {
-    if(seed != 0)
+    if (seed != 0)
     {
         ROS_INFO_STREAM("Using fixed seed of " << seed);
         std::srand(seed);
@@ -21,6 +21,24 @@ void setSeed(int seed)
 
     else
         std::srand(std::time(nullptr));
+}
+
+bool addPedAgent(RVO::RVOSimulator *sim, const RVO::Vector2 &pos, AgentInfo &agent)
+{
+    agent.id_ = gamma_sim_->addAgent(pos);
+    if (agent.id_ == RVO::RVO_ERROR)
+        return false;
+
+    else
+    {
+        gamma_sim_->setAgentResDecRate(agent.id_, 7.0);
+        gamma_sim_->setAgentAttentionRadius(agent.id_, 3.0, 1.0);
+        gamma_sim_->setAgentBehaviorType(agent.id_, RVO::AgentBehaviorType::GammaWithoutPoly);
+        agent.heading_filter_const_ = heading_filter_const;
+        agent.waypoint_filter_const_ = waypoint_filter_const;
+    }
+
+    return true;
 }
 
 //Set-up simulation parameters
@@ -56,17 +74,8 @@ bool setupGAMMA()
 
     for (auto &agent : agents_)
     {
-        agent.id_ = gamma_sim_->addAgent(RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y));
-        if (agent.id_ == RVO::RVO_ERROR)
+        if(!addPedAgent(gamma_sim_, RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y), agent))
             ROS_INFO("Failed to add agent");
-
-        else
-        {
-            gamma_sim_->setAgentResDecRate(agent.id_, 7.0);
-            gamma_sim_->setAgentAttentionRadius(agent.id_, 3.0, 1.0);
-            agent.heading_filter_const_ = heading_filter_const;
-            agent.waypoint_filter_const_ = waypoint_filter_const;
-        }
     }
 
     ROS_INFO_STREAM("Number of agents in GAMMA: " << gamma_sim_->getNumAgents());
@@ -84,18 +93,8 @@ bool resetGAMMA(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &re
     //Add back all agents
     for (auto &agent : agents_)
     {
-        //Reassign agentID from gamma
-        agent.id_ = gamma_sim_->addAgent(RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y));
-        if (agent.id_ == RVO::RVO_ERROR)
+        if(!addPedAgent(gamma_sim_, RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y), agent))
             ROS_INFO("Failed to add agent after reset");
-
-        else
-        {
-            gamma_sim_->setAgentResDecRate(agent.id_, 7.0);
-            gamma_sim_->setAgentAttentionRadius(agent.id_, 3.0, 1.0);
-            agent.heading_filter_const_ = heading_filter_const;
-            agent.waypoint_filter_const_ = waypoint_filter_const;
-        }
     }
     ROS_INFO("Reset complete");
     resp.success = true;
@@ -284,6 +283,16 @@ bool runStep()
     {
         RVO::Vector2 pref_vel = agent.getPrefVel();
 
+        if(gamma_sim_->getAgentBehaviorType(agent.id_) == RVO::AgentBehaviorType::Gamma)
+        {
+            //Get agent's current heading. Don't use AgentInfo class' heading as that one is filtered
+            RVO::Vector2 heading = gamma_sim_->getAgentHeading(agent.id_);
+            RVO::Vector2 center = gamma_sim_->getAgentPosition(agent.id_);
+            std::vector<RVO::Vector2> bounding_box = agent.getBoundingBox(heading, center);
+
+            gamma_sim_->setAgentBoundingBoxCorners(agent.id_, bounding_box);
+        }
+
         gamma_sim_->setAgentPrefVelocity(agent.id_, pref_vel);
     }
 
@@ -315,7 +324,7 @@ bool publishPedestrianPosition()
 
         //Filter agent heading from gamma
         auto agent_heading = gamma_sim_->getAgentHeading(agents_[i].id_);
-        double yaw = atan2(agent_heading.y(), agent_heading.x()) + M_PI;
+        double yaw = atan2(agent_heading.y(), agent_heading.x()) + M_PI; //Why do I need to add PI? Because gazebo heading orientation is different?
         yaw = agents_[i].updateHeading(yaw);
 
         RVO::Vector2 new_heading(cos(yaw / 2.0), -sin(yaw / 2.0));
@@ -366,11 +375,64 @@ bool readParams(ros::NodeHandle &nh)
         ROS_WARN_STREAM("Parameter seed not set. Using default setting: " << seed);
     if (!nh.getParam("scenario_name", scenario_name))
         ROS_WARN_STREAM("Parameter scenario_name not set. Using default setting: " << scenario_name);
+
+    //PID Parameters
+    nh.getParam("steering_p", steering_p);
+    nh.getParam("steering_i", steering_i);
+    nh.getParam("steering_d", steering_d);
+    nh.getParam("steering_f", steering_f);
+    nh.getParam("steering_output_ramp", steering_output_ramp);
+    nh.getParam("steering_output_desc", steering_output_desc);
+    nh.getParam("steering_max_output", steering_max_output);
+    nh.getParam("steering_min_output", steering_min_output);
+    nh.getParam("steering_max_i_output", steering_max_i_output);
+    nh.getParam("velocity_p", velocity_p);
+    nh.getParam("velocity_i", velocity_i);
+    nh.getParam("velocity_d", velocity_d);
+    nh.getParam("velocity_f", velocity_f);
+    nh.getParam("velocity_output_ramp", velocity_output_ramp);
+    nh.getParam("velocity_output_desc", velocity_output_desc);
+    nh.getParam("velocity_max_output", velocity_max_output);
+    nh.getParam("velocity_min_output", velocity_min_output);
+    nh.getParam("velocity_max_i_output", velocity_max_i_output);
+    nh.getParam("pid_freq", pid_freq);
+}
+
+bool setupPID()
+{
+    steering_pid.setPIDF(steering_p, steering_i, steering_d, steering_f);
+    steering_pid.setMaxIOutput(steering_max_i_output);
+    steering_pid.setOutputLimits(steering_min_output, steering_max_output);
+    steering_pid.setOutputRampRate(steering_output_ramp);
+    steering_pid.setOutputDescentRate(steering_output_desc);
+    steering_pid.setFrequency(pid_freq);
+
+    velocity_pid.setPIDF(velocity_p, velocity_i, velocity_d, velocity_f);
+    velocity_pid.setMaxIOutput(velocity_max_i_output);
+    velocity_pid.setOutputLimits(velocity_min_output, velocity_max_output);
+    velocity_pid.setOutputRampRate(velocity_output_ramp);
+    velocity_pid.setOutputDescentRate(velocity_output_desc);
+    velocity_pid.setFrequency(pid_freq);
+}
+
+void robotSimTimer()
+{
+    static ros::Time last = ros::Time::now();
+    while(ros::ok())
+    {
+        if((ros::Time::now() - last).toSec() < 1 / pid_freq)
+            continue;
+           
+        ROS_INFO("PID running");
+        // steering_pid.getOutput()
+        last = ros::Time::now();
+    }
+
 }
 
 void robotOdomTimer(const ros::TimerEvent &e)
 {
-    if(gamma_sim_ == nullptr)
+    if (gamma_sim_ == nullptr)
         return;
 
     double dt = (e.current_real - e.last_real).toSec();
@@ -385,18 +447,18 @@ void robotOdomTimer(const ros::TimerEvent &e)
         tf2::doTransform(temp_pose, temp_pose, odom_to_map_tf);
 
         //Calculate velocity of robot
-        double vx = (temp_pose.position.x - robot_info_.odom_.pose.pose.position.x)/dt;
-        double vy = (temp_pose.position.y - robot_info_.odom_.pose.pose.position.y)/dt;
+        double vx = (temp_pose.position.x - robot_info_.odom_.pose.pose.position.x) / dt;
+        double vy = (temp_pose.position.y - robot_info_.odom_.pose.pose.position.y) / dt;
         robot_info_.pref_vel_ = RVO::Vector2(vx, vy);
 
         //Update robot's last position
         robot_info_.odom_.pose.pose = temp_pose;
 
         //Robot has not been added to GAMMA yet
-        if(robot_info_.id_ == -1)
+        if (robot_info_.id_ == -1)
         {
             robot_info_.id_ = gamma_sim_->addAgent(RVO::Vector2(robot_info_.odom_.pose.pose.position.x, robot_info_.odom_.pose.pose.position.y));
-            if(robot_info_.id_ == RVO::RVO_ERROR)
+            if (robot_info_.id_ == RVO::RVO_ERROR)
                 ROS_ERROR("Failed to add robot agent");
 
             else
@@ -404,6 +466,7 @@ void robotOdomTimer(const ros::TimerEvent &e)
                 gamma_sim_->setAgentResDecRate(robot_info_.id_, 0.10);
                 gamma_sim_->setAgentAttentionRadius(robot_info_.id_, 2.0, 0.4);
                 gamma_sim_->setAgentTag(robot_info_.id_, "Car");
+                gamma_sim_->setAgentRadius(robot_info_.id_, 0.4);
             }
         }
 
@@ -411,7 +474,6 @@ void robotOdomTimer(const ros::TimerEvent &e)
         gamma_sim_->setAgentPosition(robot_info_.id_, RVO::Vector2(robot_info_.odom_.pose.pose.position.x, robot_info_.odom_.pose.pose.position.y));
         gamma_sim_->setAgentVelocity(robot_info_.id_, robot_info_.pref_vel_);
         gamma_sim_->setAgentPrefVelocity(robot_info_.id_, robot_info_.pref_vel_);
-        gamma_sim_->setAgentRadius(robot_info_.id_, 0.3);
     }
     catch (tf2::TransformException &ex)
     {
@@ -439,7 +501,10 @@ int main(int argc, char **argv)
     agent_states_pub_ = nh.advertise<gamma_simulator::AgentStates>("/gamma_simulator/agent_states", 1);
     obstacles_viz_pub_ = nh.advertise<visualization_msgs::MarkerArray>("/gamma_simulator/obstacles_viz", 1, true);
 
-    if(!simulate_robot)
+    if (simulate_robot)
+        robot_sim_thread_ = std::thread(&robotSimTimer);
+
+    else
         robot_odom_timer_ = nh.createTimer(ros::Duration(1.0 / rate), &robotOdomTimer);
 
     //Calculate time related parameters
@@ -450,6 +515,7 @@ int main(int argc, char **argv)
     readWaypoints(waypoints_file);
     readObstacles(obstacles_file);
     readAgents(agents_file);
+    setupPID();
     setupGAMMA();
     publishObstaclesViz();
 
@@ -465,6 +531,13 @@ int main(int argc, char **argv)
 
         runStep();
         publishPedestrianPosition();
+    }
+
+    if(simulate_robot)
+    {
+        std::cout << "\n\nWaiting for robot simulation thread to end\n";
+        robot_sim_thread_.join();
+        std::cout << "Simulation thread exited\n";
     }
 
     return 0;

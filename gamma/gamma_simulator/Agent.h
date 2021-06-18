@@ -45,7 +45,6 @@
 #include "GammaParams.h"
 #include "Minkowski.h"
 
-
 namespace RVO {
 	/**
 	 * \brief      Defines an agent in the simulation.
@@ -103,8 +102,9 @@ namespace RVO {
 		bool inCollision(const std::vector<Vector2> &polygon, const Vector2 &ref_point);
         void computeLeftAndRightMostVector(Vector2 &left_most_vector, Vector2 &right_most_vector, std::vector<Vector2> &minkowski_diff);
 
+        void computeLaneConstrains ();
 
-
+        void updateBehaviorParams();
 
 		std::vector<std::pair<float, const Agent *> > agentNeighbors_;
 		size_t maxNeighbors_;
@@ -134,6 +134,15 @@ namespace RVO {
 		float r_rear_;
 		float res_dec_rate_;
 
+		bool left_lane_constrained_;
+		bool right_lane_constrained_;
+		Vector2 path_forward_;
+
+		bool use_polygon_;
+		bool consider_kinematics_;
+		bool use_dynamic_resp_;
+		bool use_dynamic_att_;
+		AgentBehaviorType agent_behavior_type_;
 
 		friend class KdTree;
 		friend class RVOSimulator;

@@ -40,7 +40,14 @@
 #include <iostream>
 
 namespace RVO {
-	Agent::Agent(RVOSimulator *sim) : maxNeighbors_(0), maxSpeed_(0.0f), neighborDist_(0.0f), radius_(0.0f), sim_(sim), timeHorizon_(0.0f), timeHorizonObst_(0.0f), id_(0) { }
+	Agent::Agent(RVOSimulator *sim) : maxNeighbors_(0), maxSpeed_(0.0f), neighborDist_(0.0f), radius_(0.0f), sim_(sim), timeHorizon_(0.0f), timeHorizonObst_(0.0f), id_(0)
+	{
+		agent_behavior_type_ = Gamma;
+		use_polygon_ = true;
+		consider_kinematics_ = true;
+		use_dynamic_resp_ = true;
+		use_dynamic_att_ = true;
+	}
 
 	void Agent::computeNeighbors()
 	{
@@ -739,30 +746,32 @@ namespace RVO {
 		}
 	}
 
-
 	/* Search for the best new velocity. */
 	void Agent::computeNewVelocity()
 	{
 		orcaLines_.clear();
 
 		if(tag_ != "People"){
-			if (GammaParams::use_polygon) {
+			if (use_polygon_) {
 				computeObstacleOrcaLinesPoly ();
 			} else {
 				computeObstacleOrcaLinesDisc ();
 			}
 		}
+
+
+		computeLaneConstrains ();
 			
 
 		const size_t numObstLines = orcaLines_.size();
 
-		if (GammaParams::use_polygon) {
+		if (use_polygon_) {
 			computeAgentOrcaLinesPoly ();
 		} else {
 			computeAgentOrcaLinesDisc ();
 		}
 
-		if (GammaParams::consider_kinematics) {
+		if (consider_kinematics_) {
 			//computeKinematicVelSet (max_tracking_angle_);
 			computeKinematicVelSet ();
 		}
@@ -771,6 +780,35 @@ namespace RVO {
 
 		if (lineFail < orcaLines_.size()) {
 			linearProgram3(orcaLines_, numObstLines, lineFail, maxSpeed_, newVelocity_);
+		}
+	}
+
+	void Agent::computeLaneConstrains (){
+
+		float max_sideward_speed_allowed = 0.1f;
+		if(left_lane_constrained_ && path_forward_ != Vector2(0.0f, 0.0f)){
+			Vector2 left_sideward_vec = normalize(path_forward_.rotate(90.0f));
+			Line line;
+			line.point = Vector2(0.0f, 0.0f) + max_sideward_speed_allowed * left_sideward_vec;
+			// the feasible space is on the left side of a vector
+			line.direction = normalize(path_forward_.rotate(180.0f));
+			orcaLines_.push_back(line);
+
+			path_forward_ = Vector2(0.0f, 0.0f);
+			left_lane_constrained_ = false;
+		}
+
+
+		if(right_lane_constrained_  && path_forward_ != Vector2(0.0f, 0.0f) ){
+			Vector2 right_sideward_vec = normalize(path_forward_.rotate(-90.0f));
+			Line line;
+			line.point = Vector2(0.0f, 0.0f) + max_sideward_speed_allowed * right_sideward_vec;
+			// the feasible space is on the left side of a vector
+			line.direction = normalize(path_forward_);
+			orcaLines_.push_back(line);
+
+			path_forward_ = Vector2(0.0f, 0.0f);
+			right_lane_constrained_ = false;
 		}
 	}
 
@@ -842,19 +880,15 @@ namespace RVO {
 	}
 
 	float Agent::computeResponsibility(const Agent * other){
-		if(!GammaParams::use_dynamic_resp || tag_ == other->tag_)
+		if(!use_dynamic_resp_ || tag_ == other->tag_)
 			return 0.5f;
 
 		Vector2 relativePosition = other->position_ - position_;
 		float dist = abs (relativePosition);
 
 
-		float agt_res = 0.5f + 2.5f*res_dec_rate_ - res_dec_rate_ * dist;
-		//When dist > 2.5, the one with higher res dec rate will have smaller responsibility
-		//When dist < 2.5, the one with higher res dec rate will have larger responsibility
-		//When dist < 2.5, the one with lower res dec rate will have smaller responsibility
-		// agt_res = 0.5f + (2.5f - dist) * res_dec_rate_;
-		float other_agt_res = 0.5f + 2.5f*other->res_dec_rate_ - other->res_dec_rate_ * dist;
+		float agt_res = 1.0f + 2.5f*res_dec_rate_ - res_dec_rate_ * dist;
+		float other_agt_res = 1.0f + 2.5f*other->res_dec_rate_ - other->res_dec_rate_ * dist;
 
 		if (agt_res < 0.1f) {
 			agt_res = 0.1f;
@@ -868,14 +902,11 @@ namespace RVO {
 		else 
 			agt_res /= (agt_res + other_agt_res);
 
-		// if(other->tag_ == "Car" && dist < 4.0)
-			// std::cout << dist << ", " << agt_res << "\n";
-
 		return agt_res;
 	}
 
 	float Agent::computeAttention(const Agent * other){
-		if (!GammaParams::use_dynamic_att)
+		if (!use_dynamic_att_)
 			return 1.0f;
 
 		if (heading_ * (other->position_ - position_) >= 0.0f) { //  other agent is in front of the ego agent
@@ -892,6 +923,24 @@ namespace RVO {
 		}
 	}
 
+	void Agent::updateBehaviorParams(){
+		if (agent_behavior_type_ == Gamma){
+			use_polygon_ = true;
+			consider_kinematics_ = true;
+			use_dynamic_resp_ = true;
+			use_dynamic_att_ = true;
+		} else if (agent_behavior_type_ == SimplifiedGamma){
+			use_polygon_ = false;
+			consider_kinematics_ = false;
+			use_dynamic_resp_ = true;
+			use_dynamic_att_ = false;
+		} else if (agent_behavior_type_ == GammaWithoutPoly){
+			use_polygon_ = false;
+			consider_kinematics_ = true;
+			use_dynamic_resp_ = true;
+			use_dynamic_att_ = true;
+		}
+	}
 
 	void Agent::insertAgentNeighbor(const Agent *agent, float &rangeSq)
 	{
