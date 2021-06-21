@@ -23,6 +23,14 @@ void setSeed(int seed)
         std::srand(std::time(nullptr));
 }
 
+bool isQuaternionValid(const geometry_msgs::Quaternion &quat)
+{
+    if (sqrt(pow(quat.x, 2) + pow(quat.y, 2) + pow(quat.z, 2) + pow(quat.w, 2)) != 1.0)
+        return false;
+
+    return true;
+}
+
 bool addPedAgent(RVO::RVOSimulator *sim, const RVO::Vector2 &pos, AgentInfo &agent)
 {
     agent.id_ = gamma_sim_->addAgent(pos);
@@ -74,7 +82,7 @@ bool setupGAMMA()
 
     for (auto &agent : agents_)
     {
-        if(!addPedAgent(gamma_sim_, RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y), agent))
+        if (!addPedAgent(gamma_sim_, RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y), agent))
             ROS_INFO("Failed to add agent");
     }
 
@@ -93,7 +101,7 @@ bool resetGAMMA(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &re
     //Add back all agents
     for (auto &agent : agents_)
     {
-        if(!addPedAgent(gamma_sim_, RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y), agent))
+        if (!addPedAgent(gamma_sim_, RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y), agent))
             ROS_INFO("Failed to add agent after reset");
     }
     ROS_INFO("Reset complete");
@@ -283,7 +291,7 @@ bool runStep()
     {
         RVO::Vector2 pref_vel = agent.getPrefVel();
 
-        if(gamma_sim_->getAgentBehaviorType(agent.id_) == RVO::AgentBehaviorType::Gamma)
+        if (gamma_sim_->getAgentBehaviorType(agent.id_) == RVO::AgentBehaviorType::Gamma)
         {
             //Get agent's current heading. Don't use AgentInfo class' heading as that one is filtered
             RVO::Vector2 heading = gamma_sim_->getAgentHeading(agent.id_);
@@ -327,15 +335,20 @@ bool publishPedestrianPosition()
         double yaw = atan2(agent_heading.y(), agent_heading.x()) + M_PI; //Why do I need to add PI? Because gazebo heading orientation is different?
         yaw = agents_[i].updateHeading(yaw);
 
-        RVO::Vector2 new_heading(cos(yaw / 2.0), -sin(yaw / 2.0));
-        state.pose.pose.orientation.z = new_heading.x();
-        state.pose.pose.orientation.w = new_heading.y();
+        state.pose.pose.orientation.z = cos(yaw / 2.0);
+        state.pose.pose.orientation.w = -sin(yaw / 2.0);
 
         agent_states.agent_states.emplace_back(state);
     }
 
     agent_states_pub_.publish(agent_states);
 
+    return true;
+}
+
+bool publishSimRobotVelocity()
+{
+    robot_vel_pub_.publish(robot_twist_cmd);
     return true;
 }
 
@@ -415,19 +428,135 @@ bool setupPID()
     velocity_pid.setFrequency(pid_freq);
 }
 
-void robotSimTimer()
+//Global plan should constantly replan to ensure that start position is on robot
+void globalPlanCB(const nav_msgs::PathConstPtr &msg)
 {
-    static ros::Time last = ros::Time::now();
-    while(ros::ok())
+    if (msg->poses.size() == 0)
+        return;
+
+    //Get waypoint from global plan
+    double dist = 0;
+    auto new_waypoint = msg->poses.back().pose;
+    for (int i = 1; i < msg->poses.size(); ++i)
     {
-        if((ros::Time::now() - last).toSec() < 1 / pid_freq)
+        double temp_dist = sqrt(pow(msg->poses[i].pose.position.x - msg->poses[i - 1].pose.position.x, 2) +
+                                pow(msg->poses[i].pose.position.y - msg->poses[i - 1].pose.position.y, 2));
+
+        dist += temp_dist;
+        if (dist >= waypoint_distance)
+        {
+            new_waypoint = msg->poses[i].pose;
+            break;
+        }
+    }
+
+    //Transform to odom frame
+    geometry_msgs::TransformStamped odom_to_map_tf;
+    try
+    {
+        odom_to_map_tf = tf_buf.lookupTransform("odom", msg->header.frame_id, ros::Time(0), ros::Duration(1 / rate));
+        tf2::doTransform(new_waypoint, new_waypoint, odom_to_map_tf);
+        global_plan_waypoint = new_waypoint;
+
+        geometry_msgs::PoseStamped pub_pose;
+        pub_pose.pose = global_plan_waypoint;
+        pub_pose.header.frame_id = "odom";
+        waypoint_pub_.publish(pub_pose);
+    }
+    catch (tf2::TransformException &ex)
+    {
+        ROS_ERROR("%s", ex.what());
+    }
+}
+
+void robotControllerTimer()
+{
+    //robot_info_.prev_vel_ is current velocity. TODO: Do we need mutex for robot_info_?
+    static ros::Time last = ros::Time::now();
+    while (ros::ok())
+    {
+        //If time is less than control frequency, skip cycle
+        if ((ros::Time::now() - last).toSec() < 1.0 / pid_freq)
             continue;
-           
-        ROS_INFO("PID running");
+
+        //GAMMA not ready
+        if (robot_info_.id_ == -1)
+            continue;
+
+        std::cout << "Waypoint " << global_plan_waypoint.position.x << ", " << global_plan_waypoint.position.y << "\n";
+
+        //Get the robot's command velocity from gamma
+        RVO::Vector2 robot_cmd_vel = gamma_sim_->getAgentVelocity(robot_info_.id_);
+        std::cout << robot_cmd_vel.x() << ", " << robot_cmd_vel.y() << "\n";
+
+        //Get heading difference between robot command velocity and current velocity, diff = cmd - cur
+        double heading_diff = atan2(robot_cmd_vel.y(), robot_cmd_vel.x()) - robot_info_.heading_;
+        if (heading_diff > M_PI)
+            heading_diff = 2 * M_PI - heading_diff;
+
+        else if (heading_diff < -M_PI)
+            heading_diff = 2 * M_PI + heading_diff;
+
+        std::cout << heading_diff << "\n";
+
+        //Get speed difference
+        double speed_diff = RVO::abs(robot_cmd_vel) - RVO::abs(robot_info_.pref_vel_);
+
+        robot_twist_cmd.linear.x = std::min((double)RVO::abs(robot_cmd_vel), 0.5);
+        robot_twist_cmd.angular.z = std::max(std::min(heading_diff, 1.0), -1.0);
+
         // steering_pid.getOutput()
         last = ros::Time::now();
     }
+}
 
+bool setRobotVelocityConvex()
+{
+    double max_angle = 45.0, angle_res = 5;
+    double max_speed = 1.0, speed_res = 0.05;
+    int speed_size = max_speed / speed_res;
+    int angle_size = max_angle / angle_res;
+    double error_bound = 0.5;
+    RVO::Vector2 y_vel(0, 1.0);
+
+    std::vector<RVO::Vector2> boundary_v;
+    boundary_v.resize(2 * angle_size);
+    boundary_v[0] = RVO::Vector2(0, 0);
+    //Find the trackable velocities for all angles around the robot
+    for (int i = 0; i < angle_size; ++i)
+    {
+        double cur_speed = (max_angle - i * angle_res - 20) / max_angle * max_speed;
+        if(cur_speed < 0)
+            cur_speed = 0;
+        //Start from high velocities to find the boundary speed quicker
+        // for (int j = speed_size - 1; j >= 0; --j)
+        // {
+            //Acceptable speed reduces from when 0 degrees upto 45 degrees, at which point boundary is 0
+
+            // if (error < error_bound)
+            // {
+                //Straight ahead velocity
+                if (i == 0)
+                {
+                    boundary_v[1] = (cur_speed) * y_vel;
+                }
+                //Left and right velocity
+                else
+                {
+                    boundary_v[2 * i] = (cur_speed) * y_vel.rotate(i * angle_res);
+                    boundary_v[2 * i + 1] = (cur_speed) * y_vel.rotate(-i * angle_res);
+                }
+
+        //         break;
+        //     }
+        // }
+    }
+
+    auto temp = RVO::makeConvexHull(boundary_v);
+    std::reverse(temp.begin(), temp.end());
+    gamma_sim_->setAgentVelocityConvex(robot_info_.id_, temp);
+
+    return true;
 }
 
 void robotOdomTimer(const ros::TimerEvent &e)
@@ -440,7 +569,7 @@ void robotOdomTimer(const ros::TimerEvent &e)
     geometry_msgs::TransformStamped odom_to_map_tf;
     try
     {
-        odom_to_map_tf = tf_buf.lookupTransform("odom", "base_link", ros::Time(0), ros::Duration(1 / 20));
+        odom_to_map_tf = tf_buf.lookupTransform("odom", "base_link", ros::Time(0), ros::Duration(1 / rate));
 
         geometry_msgs::Pose temp_pose;
         temp_pose.orientation.w = 1;
@@ -450,6 +579,13 @@ void robotOdomTimer(const ros::TimerEvent &e)
         double vx = (temp_pose.position.x - robot_info_.odom_.pose.pose.position.x) / dt;
         double vy = (temp_pose.position.y - robot_info_.odom_.pose.pose.position.y) / dt;
         robot_info_.pref_vel_ = RVO::Vector2(vx, vy);
+
+        //Get actual heading of robot from tf
+        robot_info_.heading_ = 2 * atan2(-temp_pose.orientation.w, temp_pose.orientation.z) + M_PI;
+        if(robot_info_.heading_ > M_PI)
+            robot_info_.heading_ = -2*M_PI + robot_info_.heading_;
+        else if(robot_info_.heading_ < -M_PI)
+            robot_info_.heading_ = 2*M_PI - robot_info_.heading_;
 
         //Update robot's last position
         robot_info_.odom_.pose.pose = temp_pose;
@@ -466,14 +602,32 @@ void robotOdomTimer(const ros::TimerEvent &e)
                 gamma_sim_->setAgentResDecRate(robot_info_.id_, 0.10);
                 gamma_sim_->setAgentAttentionRadius(robot_info_.id_, 2.0, 0.4);
                 gamma_sim_->setAgentTag(robot_info_.id_, "Car");
+                gamma_sim_->setAgentBehaviorType(robot_info_.id_, RVO::AgentBehaviorType::GammaWithoutPoly);
                 gamma_sim_->setAgentRadius(robot_info_.id_, 0.4);
+                setRobotVelocityConvex();
+                ROS_INFO("Robot agent added to GAMMA");
             }
         }
 
-        //Set robot's position in gamma
         gamma_sim_->setAgentPosition(robot_info_.id_, RVO::Vector2(robot_info_.odom_.pose.pose.position.x, robot_info_.odom_.pose.pose.position.y));
-        gamma_sim_->setAgentVelocity(robot_info_.id_, robot_info_.pref_vel_);
-        gamma_sim_->setAgentPrefVelocity(robot_info_.id_, robot_info_.pref_vel_);
+
+        //Set robot's position and velocity
+        if (!simulate_robot)
+        {
+            gamma_sim_->setAgentVelocity(robot_info_.id_, robot_info_.pref_vel_);
+            gamma_sim_->setAgentPrefVelocity(robot_info_.id_, robot_info_.pref_vel_);
+        }
+
+        //Robot is being simulated, set preferred velocity using waypoint
+        else
+        {
+            if (isQuaternionValid(global_plan_waypoint.orientation))
+            {
+                RVO::Vector2 dir = RVO::normalize(RVO::Vector2(global_plan_waypoint.position.x - robot_info_.odom_.pose.pose.position.x,
+                                                               global_plan_waypoint.position.y - robot_info_.odom_.pose.pose.position.y));
+                gamma_sim_->setAgentPrefVelocity(robot_info_.id_, dir);
+            }
+        }
     }
     catch (tf2::TransformException &ex)
     {
@@ -502,10 +656,14 @@ int main(int argc, char **argv)
     obstacles_viz_pub_ = nh.advertise<visualization_msgs::MarkerArray>("/gamma_simulator/obstacles_viz", 1, true);
 
     if (simulate_robot)
-        robot_sim_thread_ = std::thread(&robotSimTimer);
+    {
+        robot_sim_thread_ = std::thread(&robotControllerTimer);
+        robot_vel_pub_ = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+        waypoint_pub_ = nh.advertise<geometry_msgs::PoseStamped>("/gamma_simulater/waypoint", 1);
+        global_plan_sub_ = nh.subscribe("/move_base/GlobalPlanner/plan", 1, &globalPlanCB);
+    }
 
-    else
-        robot_odom_timer_ = nh.createTimer(ros::Duration(1.0 / rate), &robotOdomTimer);
+    robot_odom_timer_ = nh.createTimer(ros::Duration(1.0 / rate), &robotOdomTimer);
 
     //Calculate time related parameters
     timeStep = 1 / rate;
@@ -531,9 +689,12 @@ int main(int argc, char **argv)
 
         runStep();
         publishPedestrianPosition();
+
+        if (simulate_robot)
+            publishSimRobotVelocity();
     }
 
-    if(simulate_robot)
+    if (simulate_robot)
     {
         std::cout << "\n\nWaiting for robot simulation thread to end\n";
         robot_sim_thread_.join();

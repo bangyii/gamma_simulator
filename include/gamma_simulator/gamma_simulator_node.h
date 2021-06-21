@@ -23,6 +23,7 @@
 #include <tf2_ros/transform_listener.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <gamma_simulator/pid.h>
+#include <nav_msgs/Path.h>
 
 class AgentInfo
 {
@@ -160,12 +161,20 @@ private:
 ros::Publisher robot_vel_pub_;
 ros::Publisher agent_states_pub_;
 ros::Publisher obstacles_viz_pub_;
+ros::Publisher waypoint_pub_;
+ros::Subscriber global_plan_sub_;
+
 ros::Timer robot_odom_timer_;
 std::thread robot_sim_thread_;
 ros::ServiceServer reset_gamma_serv_;
 tf2_ros::Buffer tf_buf;
+geometry_msgs::Pose global_plan_waypoint;
+geometry_msgs::Twist robot_twist_cmd;
+double waypoint_distance = 0.1;
 
 RVO::RVOSimulator *gamma_sim_ = nullptr;
+
+//GAMMA parameters
 float timeStep;
 float neighborDist = 8.0;
 int maxNeighbors = 25;
@@ -184,6 +193,8 @@ bool simulate_robot = false;
 double heading_filter_time_const = 0.2;
 double waypoint_filter_time_const = 0.5;
 int seed = 1;
+
+//GAMMA scenario parameters
 std::string scenario_name = "hospital";
 std::string waypoints_file;
 std::string obstacles_file;
@@ -210,7 +221,7 @@ double velocity_max_output = 0;
 double velocity_min_output = 0;
 double velocity_max_i_output = 0;
 
-double pid_freq = 2;
+double pid_freq = 10;
 
 PID steering_pid;
 PID velocity_pid;
