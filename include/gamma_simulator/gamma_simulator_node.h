@@ -170,7 +170,7 @@ ros::ServiceServer reset_gamma_serv_;
 tf2_ros::Buffer tf_buf;
 geometry_msgs::Pose global_plan_waypoint;
 geometry_msgs::Twist robot_twist_cmd;
-double waypoint_distance = 0.1;
+double waypoint_distance = 0.9;
 
 RVO::RVOSimulator *gamma_sim_ = nullptr;
 
@@ -189,7 +189,7 @@ bool use_polygon = true;
 bool consider_kinematics = true;
 bool use_dynamic_resp = true;
 bool use_dynamic_att = true;
-bool simulate_robot = false;
+bool simulate_robot = true;
 double heading_filter_time_const = 0.2;
 double waypoint_filter_time_const = 0.5;
 int seed = 1;
