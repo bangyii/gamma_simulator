@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <limits>
 #include <thread>
+#include <mutex>
 
 //ROS
 #include <gamma_simulator/Agent.h>
@@ -171,6 +172,7 @@ tf2_ros::Buffer tf_buf;
 geometry_msgs::Pose global_plan_waypoint;
 geometry_msgs::Twist robot_twist_cmd;
 double waypoint_distance = 0.9;
+std::mutex valid_mutex;
 
 RVO::RVOSimulator *gamma_sim_ = nullptr;
 
