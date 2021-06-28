@@ -93,6 +93,7 @@ bool setupGAMMA()
 
 bool resetGAMMA(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &resp)
 {
+	std::lock_guard<std::mutex> guard(valid_mutex);
     gamma_sim_->clearAllAgents();
     robot_info_.id_ = -1;
     agents_ = agents_initial_;
@@ -451,6 +452,7 @@ void robotControllerTimer()
     static ros::Time last = ros::Time::now();
     while (ros::ok())
     {
+	std::lock_guard<std::mutex> guard(valid_mutex);
         //If time is less than control frequency, skip cycle
         if ((ros::Time::now() - last).toSec() < 1.0 / pid_freq)
             continue;
