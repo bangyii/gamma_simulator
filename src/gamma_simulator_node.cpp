@@ -326,8 +326,6 @@ bool publishSimRobotVelocity()
 
 bool readParams(ros::NodeHandle &nh)
 {
-    if (!nh.getParam("timeStep", timeStep))
-        ROS_WARN_STREAM("Parameter timeStep not set. Using default setting: " << timeStep);
     if (!nh.getParam("neighborDist", neighborDist))
         ROS_WARN_STREAM("Parameter neighborDist not set. Using default setting: " << neighborDist);
     if (!nh.getParam("maxNeighbors", maxNeighbors))
@@ -342,14 +340,14 @@ bool readParams(ros::NodeHandle &nh)
         ROS_WARN_STREAM("Parameter maxSpeed not set. Using default setting: " << maxSpeed);
     if (!nh.getParam("rate", rate))
         ROS_WARN_STREAM("Parameter rate not set. Using default setting: " << rate);
-    if (!nh.getParam("use_polygon", use_polygon))
-        ROS_WARN_STREAM("Parameter use_polygon not set. Using default setting: " << use_polygon);
-    if (!nh.getParam("consider_kinematics", consider_kinematics))
-        ROS_WARN_STREAM("Parameter consider_kinematics not set. Using default setting: " << consider_kinematics);
-    if (!nh.getParam("use_dynamic_resp", use_dynamic_resp))
-        ROS_WARN_STREAM("Parameter use_dynamic_resp not set. Using default setting: " << use_dynamic_resp);
-    if (!nh.getParam("use_dynamic_att", use_dynamic_att))
-        ROS_WARN_STREAM("Parameter use_dynamic_att not set. Using default setting: " << use_dynamic_att);
+    // if (!nh.getParam("use_polygon", use_polygon))
+    //     ROS_WARN_STREAM("Parameter use_polygon not set. Using default setting: " << use_polygon);
+    // if (!nh.getParam("consider_kinematics", consider_kinematics))
+    //     ROS_WARN_STREAM("Parameter consider_kinematics not set. Using default setting: " << consider_kinematics);
+    // if (!nh.getParam("use_dynamic_resp", use_dynamic_resp))
+    //     ROS_WARN_STREAM("Parameter use_dynamic_resp not set. Using default setting: " << use_dynamic_resp);
+    // if (!nh.getParam("use_dynamic_att", use_dynamic_att))
+    //     ROS_WARN_STREAM("Parameter use_dynamic_att not set. Using default setting: " << use_dynamic_att);
     if (!nh.getParam("heading_filter_time_const", heading_filter_time_const))
         ROS_WARN_STREAM("Parameter heading_filter_time_const not set. Using default setting: " << heading_filter_time_const);
     if (!nh.getParam("waypoint_filter_time_const", waypoint_filter_time_const))
@@ -672,7 +670,7 @@ bool runStep()
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "gamma_simulator");
-    ros::NodeHandle nh;
+    ros::NodeHandle nh("~");
 
     //Start tf buffer
     tf2_ros::TransformListener listener(tf_buf);
@@ -692,7 +690,7 @@ int main(int argc, char **argv)
     if (simulate_robot)
     {
         robot_sim_thread_ = std::thread(&robotControllerTimer);
-        robot_vel_pub_ = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 1);
+        robot_vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
         waypoint_pub_ = nh.advertise<geometry_msgs::PoseStamped>("/gamma_simulater/waypoint", 1);
         global_plan_sub_ = nh.subscribe("/move_base/GlobalPlanner/plan", 1, &globalPlanCB);
     }

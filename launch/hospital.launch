@@ -1,0 +1,16 @@
+<launch>
+	<node pkg="gamma_simulator" type="gamma_simulator_node" name="gamma_simulator" output="screen">
+		<param name="neighborDist" value="8.0"/>
+		<param name="maxNeighbors" value="25"/>
+		<param name="timeHorizon" value="4.0"/>
+		<param name="timeHorizonObst" value="0.3"/>
+		<param name="radius" value="0.25"/>
+		<param name="maxSpeed" value="1.0"/>
+		<param name="rate" value="60"/>
+		<param name="heading_filter_time_const" value="0.92"/>
+		<param name="waypoint_filter_time_const" value="0.92"/>
+		<param name="simulate_robot" value="false"/>
+		<param name="seed" value="1"/>
+		<param name="scenario_name" value="hospital"/>
+	</node>
+</launch>
