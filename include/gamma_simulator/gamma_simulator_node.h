@@ -195,7 +195,7 @@ double waypoint_filter_time_const = 0.5;
 int seed = 1;
 
 //GAMMA scenario parameters
-std::string scenario_name = "hospital";
+std::string scenario_name = "doorway";
 std::string waypoints_file;
 std::string obstacles_file;
 std::string agents_file;

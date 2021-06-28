@@ -43,7 +43,7 @@ contours, hierarchy = cv2.findContours(binary, cv2.RETR_TREE, cv2.CHAIN_APPROX_S
 
 # Set origin and resolution of obstacles
 x_origin = -12.5
-y_origin = -35
+y_origin = -10.3
 resolution = 0.05
 for i in range(len(contours)):
     if(len(contours[i]) < 2):
