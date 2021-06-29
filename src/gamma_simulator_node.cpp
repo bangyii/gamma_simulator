@@ -691,7 +691,7 @@ int main(int argc, char **argv)
     {
         robot_sim_thread_ = std::thread(&robotControllerTimer);
         robot_vel_pub_ = nh.advertise<geometry_msgs::Twist>("cmd_vel", 1);
-        waypoint_pub_ = nh.advertise<geometry_msgs::PoseStamped>("/gamma_simulater/waypoint", 1);
+        waypoint_pub_ = nh.advertise<geometry_msgs::PoseStamped>("/gamma_simulator/waypoint", 1);
         global_plan_sub_ = nh.subscribe("/move_base/GlobalPlanner/plan", 1, &globalPlanCB);
     }
 
