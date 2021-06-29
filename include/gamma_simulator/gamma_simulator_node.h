@@ -105,18 +105,6 @@ public:
         bounding_box.push_back(center + 0.25 * heading + 0.25 * heading_rot);
         bounding_box.push_back(center + 0.25 * heading - 0.25 * heading_rot);
         bounding_box.push_back(center - 0.25 * heading - 0.25 * heading_rot);
-
-        //Rotate original box size by heading amount
-        // double yaw = atan2(heading.y(), heading.x());
-        // for(auto &corner : bounding_box)
-        //     corner.rotate(yaw);
-
-        // std::vector<RVO::Vector2> bounding_box = box_size_;
-        // RVO::Vector2 pos(odom_.pose.pose.position.x, odom_.pose.pose.position.y);
-        // //Offset entire box by current position
-        // for(auto &corner : bounding_box)
-        //     corner += pos;
-
         return bounding_box;
     }
 
