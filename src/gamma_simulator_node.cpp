@@ -350,6 +350,8 @@ bool readParams(ros::NodeHandle &nh)
         ROS_WARN_STREAM("Parameter seed not set. Using default setting: " << seed);
     if (!nh.getParam("scenario_name", scenario_name))
         ROS_WARN_STREAM("Parameter scenario_name not set. Using default setting: " << scenario_name);
+    if (!nh.getParam("robot_radius", robot_radius))
+        ROS_WARN_STREAM("Parameter robot_radius not set. Using default setting: " << robot_radius);
 
     //PID Parameters
     nh.getParam("steering_p", steering_p);
@@ -579,7 +581,7 @@ void robotOdom()
                 gamma_sim_->setAgentAttentionRadius(robot_info_.id_, 2.0, 0.4);
                 gamma_sim_->setAgentTag(robot_info_.id_, "Car");
                 gamma_sim_->setAgentBehaviorType(robot_info_.id_, RVO::AgentBehaviorType::GammaWithoutPoly);
-                gamma_sim_->setAgentRadius(robot_info_.id_, 0.4);
+                gamma_sim_->setAgentRadius(robot_info_.id_, robot_radius);
                 setRobotVelocityConvex();
                 ROS_INFO("Robot agent added to GAMMA");
             }

@@ -9,6 +9,7 @@
 		<param name="rate" value="60"/>
 		<param name="heading_filter_time_const" value="0.20"/>
 		<param name="waypoint_filter_time_const" value="0.50"/>
+		<param name="robot_radius" value="0.40"/>
 		<param name="simulate_robot" value="false"/>
 		<param name="seed" value="1"/>
 		<param name="scenario_name" value="doorway"/>

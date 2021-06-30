@@ -183,6 +183,7 @@ bool simulate_robot = true;
 double heading_filter_time_const = 0.2;
 double waypoint_filter_time_const = 0.5;
 int seed = 1;
+double robot_radius = 0.4;
 
 //GAMMA scenario parameters
 std::string scenario_name = "hospital";
