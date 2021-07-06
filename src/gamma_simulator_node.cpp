@@ -93,7 +93,7 @@ bool setupGAMMA()
 
 bool resetGAMMA(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &resp)
 {
-	std::lock_guard<std::mutex> guard(valid_mutex);
+    std::lock_guard<std::mutex> guard(valid_mutex);
     gamma_sim_->clearAllAgents();
     robot_info_.id_ = -1;
     agents_ = agents_initial_;
@@ -217,7 +217,8 @@ bool readAgents(const std::string &file)
         std::vector<std::string> waypoints;
         line += comma_delim; //Append delimiter to allow reading of last token
         int num_agents;
-        double x, y, dx, dy;
+        double x, y, dx, dy, trigger_x, trigger_y, trigger_radius;
+        bool use_trigger = false;
         while ((pos = line.find(comma_delim)) != std::string::npos)
         {
             agent_param = line.substr(0, pos);
@@ -243,6 +244,26 @@ bool readAgents(const std::string &file)
                 dy = std::stod(agent_param);
                 break;
 
+            case 5:
+                trigger_x = std::stod(agent_param);
+                break;
+
+            case 6:
+                trigger_y = std::stod(agent_param);
+                break;
+
+            case 7:
+                trigger_radius = std::stod(agent_param);
+                break;
+
+            case 8:
+                if (agent_param == "false")
+                    use_trigger = false;
+
+                else if (agent_param == "true")
+                    use_trigger = true;
+                break;
+
             //Remaining parameters are waypoints
             default:
                 waypoints.push_back(agent_param);
@@ -258,6 +279,9 @@ bool readAgents(const std::string &file)
         for (int i = 0; i < num_agents; ++i)
         {
             AgentInfo temp_agent;
+            temp_agent.use_trigger_point = use_trigger;
+            temp_agent.trigger_point = RVO::Vector2(trigger_x, trigger_y);
+            temp_agent.trigger_point_radius = trigger_radius;
             for (const auto &wp : waypoints)
                 temp_agent.waypoints_.push_back(waypoints_[wp]);
             RVO::Vector2 pertubation((float)std::rand() / RAND_MAX * dx - dx / 2.0,
@@ -414,7 +438,6 @@ void globalPlanCB(const nav_msgs::PathConstPtr &msg)
         }
     }
 
-
     //Transform to odom frame
     geometry_msgs::TransformStamped odom_to_map_tf;
     try
@@ -444,7 +467,7 @@ void robotControllerTimer()
     static ros::Time last = ros::Time::now();
     while (ros::ok())
     {
-	std::lock_guard<std::mutex> guard(valid_mutex);
+        std::lock_guard<std::mutex> guard(valid_mutex);
         //If time is less than control frequency, skip cycle
         if ((ros::Time::now() - last).toSec() < 1.0 / pid_freq)
             continue;
@@ -454,7 +477,7 @@ void robotControllerTimer()
             continue;
 
         auto pref_vel = gamma_sim_->getAgentPrefVelocity(robot_info_.id_);
-        if(pref_vel.x() == 0.0 && pref_vel.y() == 0.0)
+        if (pref_vel.x() == 0.0 && pref_vel.y() == 0.0)
         {
             robot_twist_cmd.linear.x = 0.0;
             robot_twist_cmd.angular.z = 0.0;
@@ -479,7 +502,7 @@ void robotControllerTimer()
         robot_twist_cmd.linear.x = RVO::abs(robot_cmd_vel);
 
         //Cap total magnitude of angular and linear velocity to simulate joystick behavior
-        if(fabs(robot_twist_cmd.linear.x) + fabs(robot_twist_cmd.angular.z) > 1.0)
+        if (fabs(robot_twist_cmd.linear.x) + fabs(robot_twist_cmd.angular.z) > 1.0)
             robot_twist_cmd.linear.x = robot_twist_cmd.linear.x / fabs(robot_twist_cmd.linear.x) * (1.0 - fabs(robot_twist_cmd.angular.z));
 
         // steering_pid.getOutput()
@@ -503,30 +526,19 @@ bool setRobotVelocityConvex()
     for (int i = 0; i < angle_size; ++i)
     {
         double cur_speed = (max_angle - i * angle_res) / max_angle * max_speed;
-        if(cur_speed < 0)
+        if (cur_speed < 0)
             cur_speed = 0;
-        //Start from high velocities to find the boundary speed quicker
-        // for (int j = speed_size - 1; j >= 0; --j)
-        // {
-            //Acceptable speed reduces from when 0 degrees upto 45 degrees, at which point boundary is 0
-
-            // if (error < error_bound)
-            // {
-                //Straight ahead velocity
-                if (i == 0)
-                {
-                    boundary_v[1] = (cur_speed) * y_vel;
-                }
-                //Left and right velocity
-                else
-                {
-                    boundary_v[2 * i] = (cur_speed) * y_vel.rotate(i * angle_res);
-                    boundary_v[2 * i + 1] = (cur_speed) * y_vel.rotate(-i * angle_res);
-                }
-
-        //         break;
-        //     }
-        // }
+        //Straight ahead velocity
+        if (i == 0)
+        {
+            boundary_v[1] = (cur_speed)*y_vel;
+        }
+        //Left and right velocity
+        else
+        {
+            boundary_v[2 * i] = (cur_speed)*y_vel.rotate(i * angle_res);
+            boundary_v[2 * i + 1] = (cur_speed)*y_vel.rotate(-i * angle_res);
+        }
     }
 
     auto temp = RVO::makeConvexHull(boundary_v);
@@ -560,10 +572,10 @@ void robotOdom()
 
         //Get actual heading of robot from tf
         robot_info_.heading_ = 2 * atan2(-temp_pose.orientation.w, temp_pose.orientation.z) + M_PI;
-        if(robot_info_.heading_ > M_PI)
-            robot_info_.heading_ = -2*M_PI + robot_info_.heading_;
-        else if(robot_info_.heading_ < -M_PI)
-            robot_info_.heading_ = 2*M_PI - robot_info_.heading_;
+        if (robot_info_.heading_ > M_PI)
+            robot_info_.heading_ = -2 * M_PI + robot_info_.heading_;
+        else if (robot_info_.heading_ < -M_PI)
+            robot_info_.heading_ = 2 * M_PI - robot_info_.heading_;
 
         //Update robot's last position
         robot_info_.odom_.pose.pose = temp_pose;
@@ -631,20 +643,27 @@ bool runStep()
     robotOdom();
 
     //Get preferred velocity based on current waypoint
-    for (auto &agent : agents_)
+    RVO::Vector2 robot_pos(robot_info_.odom_.pose.pose.position.x, robot_info_.odom_.pose.pose.position.y);
+    for(int i = 0; i < agents_.size(); ++i)
     {
-        RVO::Vector2 pref_vel = agent.getPrefVel();
-
-        if (gamma_sim_->getAgentBehaviorType(agent.id_) == RVO::AgentBehaviorType::Gamma)
+        auto &agent = agents_[i];
+        if (agent.use_trigger_point)
         {
-            //Get agent's current heading. Don't use AgentInfo class' heading as that one is filtered
-            RVO::Vector2 heading = gamma_sim_->getAgentHeading(agent.id_);
-            RVO::Vector2 center = gamma_sim_->getAgentPosition(agent.id_);
-            std::vector<RVO::Vector2> bounding_box = agent.getBoundingBox(heading, center);
+            //Move agent off frame when trajectory complete
+            if (agent.final_waypoint_reached)
+            {
+                agent.pref_vel_ = RVO::Vector2(0, 0);
+                agent.odom_.pose.pose.position.x = -1000;
+                agent.odom_.pose.pose.position.y = -1000;
+                gamma_sim_->setAgentPosition(agent.id_, RVO::Vector2(agent.odom_.pose.pose.position.x, agent.odom_.pose.pose.position.y));
+            }
 
-            gamma_sim_->setAgentBoundingBoxCorners(agent.id_, bounding_box);
+            //Send robot position to agent for checking
+            else
+                agent.checkTriggerPoint(robot_pos);
         }
 
+        RVO::Vector2 pref_vel = agent.getPrefVel();
         gamma_sim_->setAgentPrefVelocity(agent.id_, pref_vel);
     }
 
