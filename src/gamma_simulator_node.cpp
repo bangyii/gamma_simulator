@@ -1,4 +1,6 @@
 #include <gamma_simulator/gamma_simulator_node.h>
+#include <visualization_msgs/Marker.h>
+#include <visualization_msgs/MarkerArray.h>
 #include <std_srvs/Trigger.h>
 #include <ros/package.h>
 #include <fstream>
@@ -339,6 +341,60 @@ bool publishPedestrianPosition()
 
     agent_states_pub_.publish(agent_states);
 
+    return true;
+}
+
+bool publishWaypointMarkers()
+{
+    visualization_msgs::MarkerArray waypoint_markers;
+    int i = 0;
+    for(const auto &pair : waypoints_)
+    {
+        RVO::Vector2 cur_waypoint = pair.second;
+
+        //Add waypoint flat circle marker
+        visualization_msgs::Marker wp_marker;
+        wp_marker.header.frame_id = "map";
+        wp_marker.ns = std::to_string(i);
+        wp_marker.id = i;
+        wp_marker.action = 0;
+        wp_marker.type = 3;
+        wp_marker.pose.position.x = cur_waypoint.x();
+        wp_marker.pose.position.y = cur_waypoint.y();
+        wp_marker.pose.position.z = 0;
+        wp_marker.scale.x = 0.9;
+        wp_marker.scale.y = 0.9;
+        wp_marker.scale.z = 0.01;
+        wp_marker.color.r = 0;
+        wp_marker.color.g = 1;
+        wp_marker.color.b = 1;
+        wp_marker.color.a = 1;
+        wp_marker.lifetime = ros::Duration(0);
+
+        //Add label text for waypoint
+        visualization_msgs::Marker text_marker;
+        text_marker.header.frame_id = "map";
+        text_marker.ns = std::to_string(i) + std::string(" Text");
+        text_marker.id = i + waypoints_.size();
+        text_marker.action = 0;
+        text_marker.type = 9;
+        text_marker.pose.position.x = cur_waypoint.x();
+        text_marker.pose.position.y = cur_waypoint.y();
+        text_marker.pose.position.z = 0.05;
+        text_marker.scale.z = 0.9;
+        text_marker.color.r = 0;
+        text_marker.color.g = 0;
+        text_marker.color.b = 0;
+        text_marker.color.a = 1;
+        text_marker.text = std::string(pair.first);
+        text_marker.lifetime = ros::Duration(0);
+
+        waypoint_markers.markers.emplace_back(std::move(wp_marker));
+        waypoint_markers.markers.emplace_back(std::move(text_marker));
+        ++i;
+    }
+
+    all_waypoints_pub_.publish(waypoint_markers);
     return true;
 }
 
@@ -699,6 +755,7 @@ int main(int argc, char **argv)
 
     agent_states_pub_ = nh.advertise<gamma_simulator::AgentStates>("/gamma_simulator/agent_states", 1);
     obstacles_viz_pub_ = nh.advertise<visualization_msgs::MarkerArray>("/gamma_simulator/obstacles_viz", 1, true);
+    all_waypoints_pub_ = nh.advertise<visualization_msgs::MarkerArray>("/gamma_simualtor/all_waypoints", 1, true);
 
     if (simulate_robot)
     {
@@ -718,6 +775,7 @@ int main(int argc, char **argv)
     readWaypoints(waypoints_file);
     readObstacles(obstacles_file);
     readAgents(agents_file);
+    publishWaypointMarkers();
     setupPID();
     setupGAMMA();
     publishObstaclesViz();

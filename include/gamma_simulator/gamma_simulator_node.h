@@ -32,6 +32,7 @@ ros::Publisher robot_vel_pub_;
 ros::Publisher agent_states_pub_;
 ros::Publisher obstacles_viz_pub_;
 ros::Publisher waypoint_pub_;
+ros::Publisher all_waypoints_pub_;
 ros::Subscriber global_plan_sub_;
 
 ros::Timer robot_odom_timer_;
