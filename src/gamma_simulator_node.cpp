@@ -666,8 +666,6 @@ void robotOdom()
             if(fabs(robot_info_.pref_vel_.x()) < 0.05 && fabs(robot_info_.pref_vel_.y()) < 0.05)
                 robot_info_.pref_vel_ = RVO::Vector2(stopped_pref_vel * cos(robot_info_.heading_), stopped_pref_vel * sin(robot_info_.heading_));
 
-            std::cout << robot_info_.pref_vel_.x() << ", " << robot_info_.pref_vel_.y() << "\n";
-
             gamma_sim_->setAgentVelocity(robot_info_.id_, robot_info_.pref_vel_);
             gamma_sim_->setAgentPrefVelocity(robot_info_.id_, robot_info_.pref_vel_);
         }
