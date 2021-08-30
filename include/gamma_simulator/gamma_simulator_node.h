@@ -57,6 +57,7 @@ float maxSpeed = 1.0;
 float rate = 60;
 double heading_filter_const = 0.92;
 double waypoint_filter_const = 0.92;
+double stopped_pref_vel = 0.5;
 bool use_polygon = true;
 bool consider_kinematics = true;
 bool use_dynamic_resp = true;

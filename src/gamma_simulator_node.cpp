@@ -432,6 +432,8 @@ bool readParams(ros::NodeHandle &nh)
         ROS_WARN_STREAM("Parameter scenario_name not set. Using default setting: " << scenario_name);
     if (!nh.getParam("robot_radius", robot_radius))
         ROS_WARN_STREAM("Parameter robot_radius not set. Using default setting: " << robot_radius);
+    if (!nh.getParam("stopped_pref_vel", stopped_pref_vel))
+        ROS_WARN_STREAM("Parameter stopped_pref_vel not set. Using default setting: " << stopped_pref_vel);
 
     //PID Parameters
     nh.getParam("steering_p", steering_p);
@@ -660,6 +662,12 @@ void robotOdom()
         //Set robot's position and velocity
         if (!simulate_robot)
         {
+            //If robot's current velocity is 0, give it a small forward preferred velocity so that peds don't stop in front of agent
+            if(fabs(robot_info_.pref_vel_.x()) < 0.05 && fabs(robot_info_.pref_vel_.y()) < 0.05)
+                robot_info_.pref_vel_ = RVO::Vector2(stopped_pref_vel * cos(robot_info_.heading_), stopped_pref_vel * sin(robot_info_.heading_));
+
+            std::cout << robot_info_.pref_vel_.x() << ", " << robot_info_.pref_vel_.y() << "\n";
+
             gamma_sim_->setAgentVelocity(robot_info_.id_, robot_info_.pref_vel_);
             gamma_sim_->setAgentPrefVelocity(robot_info_.id_, robot_info_.pref_vel_);
         }
